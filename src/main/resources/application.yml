@@ -1,0 +1,11 @@
+server:
+  port: 20199
+  error:
+    whitelabel:
+      enabled: false
+spring:
+  mvc:
+    view:
+      prefix: classpath:/templates/
+      suffix: .html
+    static-path-pattern: /static/**

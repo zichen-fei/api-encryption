@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>Title</title>
+    <!--CryptoJS jsencrypt -->
+    <script th:src="@{~/static/js/cryptojs.js}"></script>
+    <script th:src="@{~/static/js/jsencrypt.js}"></script>
+    <script th:src="@{~/static/js/aesUtil.js}"></script>
+    <script th:src="@{~/static/js/rsaUtil.js}"></script>
+    <script src="http://apps.bdimg.com/libs/jquery/2.1.4/jquery.min.js"></script>
+    <script>
+        //获取前端RSA公钥密码、AES的key，并放到window
+        var genKeyPair = rsaUtil.genKeyPair();
+        window.jsPublicKey = genKeyPair.publicKey;
+        window.jsPrivateKey = genKeyPair.privateKey;
+
+        /**
+         * 重写jquery的ajax方法
+         */
+        var _ajax = $.ajax;
+        $.ajax = function (opt) {
+            var fn = {
+                error: function (XMLHttpRequest, textStatus, errorThrown) {
+                },
+                success: function (data, textStatus) {
+                }
+            };
+            if (opt.error) {
+                fn.error = opt.error;
+            }
+            if (opt.success) {
+                fn.success = opt.success;
+            }
+
+            //加密再传输
+            if (opt.type.toLowerCase() === "post") {
+                var data = opt.data;
+                //发送请求之前随机获取AES的key
+                var aesKey = aesUtil.genKey();
+                data = {
+                    data: aesUtil.encrypt(data, aesKey),
+                    aesKey: rsaUtil.encrypt(aesKey, sessionStorage.getItem('javaPublicKey')),
+                    publicKey: window.jsPublicKey
+                };
+                $("#show3").html("请求参数：" + JSON.stringify(data, undefined, 2));
+                opt.data = data;
+            }
+
+            //扩展增强处理
+            var _opt = $.extend(opt, {
+                success: function (data, textStatus) {
+                    if (opt.type.toLowerCase() === "post") {
+                        $("#show1").html("后台返回数据：" + JSON.stringify(data, undefined, 2));
+                        //先获取明文aesKey，再用明文key去解密数据
+                        data = aesUtil.decrypt(data.data.data, rsaUtil.decrypt(data.data.aesKey, window.jsPrivateKey));
+                        console.log(data);
+                        $("#show2").html("js解密后的数据" + JSON.stringify(data, undefined, 2));
+                    }
+                    fn.success(data, textStatus);
+                }
+            });
+            return _ajax(_opt);
+        };
+
+        function login() {
+            $.ajax({
+                type: "POST",
+                dataType: "json",
+                url: "http://192.168.10.189:20199/user/login",
+                data: JSON.stringify(transformToJson($('#form1').serializeArray())),
+                success: function (result) {
+                    if (result.status === 200) {
+                        // alert("SUCCESS");
+                    }
+                },
+                error: function () {
+                    alert("异常！");
+                }
+            });
+        }
+
+        function getKey() {
+            $.ajax({
+                type: "GET",
+                dataType: "json",
+                url: "http://192.168.10.189:20199/get/key",
+                success: function (result) {
+                    if (result.status === 200) {
+                        $("#show4").html(result.data);
+                        publicKey = result.data;
+                        sessionStorage.setItem('javaPublicKey', publicKey);
+                    }
+                },
+                error: function () {
+                    alert("异常！");
+                }
+            });
+        }
+
+        function transformToJson(formData){
+            var obj={};
+            for (var i in formData) {
+                obj[formData[i].name]=formData[i]['value'];
+            }
+            return obj;
+        }
+    </script>
+</head>
+<body>
+<input type="button" value="获取后台公钥" onclick="getKey()">
+<br>
+<div id="show4">
+
+</div>
+<br>
+<form onsubmit="return false" method="post" id="form1">
+    <p>用户名：<input name="username" type="text" placeholder="userName"></p>
+    <p>密 码：<input name="password" type="password" placeholder="Password"></p>
+    <input type="button" value="登录" onclick="login()">
+</form>
+<div id="show3">
+
+</div>
+<br>
+<div id="show1">
+
+</div>
+<br>
+<div id="show2">
+
+</div>
+</body>
+</html>
